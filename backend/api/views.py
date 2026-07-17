@@ -4,11 +4,13 @@ from django.contrib.auth.models import User
 from .serializers import RegisterSerializer
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from .models import Circle, Membership
+from .models import Circle, Membership, Round, Contribution
 from .serializers import CircleSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from datetime import timedelta
+from django.utils import timezone
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
@@ -42,10 +44,18 @@ def create_circle(request):
     if serializer.is_valid():
         circle = serializer.save(admin=request.user)
 
+        # Add admin as first member
         Membership.objects.create(
             user=request.user,
             circle=circle,
             position=1
+        )
+
+        # Create first saving round automatically
+        Round.objects.create(
+            circle=circle,
+            recipient=request.user,
+            deadline=timezone.now() + timedelta(days=7)
         )
 
         return Response(CircleSerializer(circle).data, status=201)
@@ -78,3 +88,95 @@ def join_circle(request):
     )
 
     return Response({"message": "Joined successfully"})
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def contribute(request):
+
+    round_id = request.data.get("round_id")
+
+    try:
+        current_round = Round.objects.get(
+            id=round_id,
+            status="OPEN"
+        )
+
+    except Round.DoesNotExist:
+        return Response(
+            {"error": "Round not found"},
+            status=404
+        )
+
+
+    # Recipient does not pay
+    if current_round.recipient == request.user:
+        return Response(
+            {"error": "Recipient does not contribute"},
+            status=400
+        )
+
+
+    # Prevent duplicate contribution
+    if Contribution.objects.filter(
+        round=current_round,
+        member=request.user
+    ).exists():
+
+        return Response(
+            {"error": "Already contributed"},
+            status=400
+        )
+
+
+    amount = current_round.contribution_amount
+
+    penalty = 0
+
+
+    # Check late payment
+    if timezone.now() > current_round.deadline:
+
+        penalty = int(
+            (
+                Decimal(amount * current_round.penalty_rate)
+                /
+                Decimal(100)
+
+            ).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP
+            )
+        )
+
+
+    # Save contribution
+    Contribution.objects.create(
+        round=current_round,
+        member=request.user,
+        amount=amount,
+        penalty=penalty
+    )
+
+
+    # Check whether all members paid
+    expected = (
+        Membership.objects
+        .filter(circle=current_round.circle)
+        .count()
+        - 1
+    )
+
+
+    if current_round.contributions.count() >= expected:
+
+        current_round.status = "PENDING"
+        current_round.save()
+
+
+    return Response(
+        {
+            "message": "Contribution recorded",
+            "penalty": penalty
+        },
+        status=201
+    )

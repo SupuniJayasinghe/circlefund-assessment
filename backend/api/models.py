@@ -1,7 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 import uuid
-
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
 
 class Circle(models.Model):
     name = models.CharField(max_length=100)
@@ -28,3 +29,29 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.circle.name}"
+    
+class Round(models.Model):
+    STATUS_CHOICES = [
+        ("OPEN", "Open"),
+        ("PENDING", "Pending Approval"),
+        ("CLOSED", "Closed"),
+    ]
+
+    circle = models.ForeignKey(Circle, on_delete=models.CASCADE)
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE)
+    contribution_amount = models.IntegerField(default=5000)  # minor units
+    penalty_rate = models.IntegerField(default=3)
+    deadline = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="OPEN")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Contribution(models.Model):
+    round = models.ForeignKey(Round, on_delete=models.CASCADE, related_name="contributions")
+    member = models.ForeignKey(User, on_delete=models.CASCADE)
+    amount = models.IntegerField()
+    penalty = models.IntegerField(default=0)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("round", "member")

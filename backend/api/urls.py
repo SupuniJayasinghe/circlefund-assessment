@@ -9,4 +9,5 @@ urlpatterns = [
     path('me/', MeView.as_view(), name='me'),
     path("circles/create/", views.create_circle),
     path("circles/join/", views.join_circle),   
+    path("rounds/contribute/", views.contribute),
 ]
