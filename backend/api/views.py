@@ -11,6 +11,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from datetime import timedelta
 from django.utils import timezone
+from django.db import transaction
+import math
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
@@ -180,3 +182,90 @@ def contribute(request):
         },
         status=201
     )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def approve_payout(request):
+
+    round_id = request.data.get("round_id")
+
+
+    with transaction.atomic():
+
+        try:
+            current_round = (
+                Round.objects
+                .select_for_update()
+                .get(
+                    id=round_id,
+                    status="PENDING"
+                )
+            )
+
+        except Round.DoesNotExist:
+            return Response(
+                {"error":"Pending round not found"},
+                status=404
+            )
+
+
+        # only circle admin
+        if current_round.circle.admin != request.user:
+            return Response(
+                {"error":"Only admin can approve"},
+                status=403
+            )
+
+
+        total = 0
+
+        contributions = current_round.contributions.all()
+
+
+        for contribution in contributions:
+            total += (
+                contribution.amount +
+                contribution.penalty
+            )
+
+
+        payout = math.floor(total * 0.99)
+
+
+        current_round.payout_amount = payout
+        current_round.status = "CLOSED"
+        current_round.save()
+
+
+
+        # find next recipient
+        members = (
+            Membership.objects
+            .filter(circle=current_round.circle)
+            .order_by("position")
+        )
+
+
+        next_member = None
+
+
+        for member in members:
+
+            if member.user != current_round.recipient:
+                next_member = member.user
+                break
+
+
+        if next_member:
+
+            Round.objects.create(
+                circle=current_round.circle,
+                recipient=next_member,
+                deadline=timezone.now()+timedelta(days=7)
+            )
+
+
+        return Response({
+            "message":"Payout approved",
+            "payout_amount":payout
+        })

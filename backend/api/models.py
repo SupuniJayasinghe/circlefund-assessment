@@ -29,8 +29,10 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.circle.name}"
-    
+
+
 class Round(models.Model):
+
     STATUS_CHOICES = [
         ("OPEN", "Open"),
         ("PENDING", "Pending Approval"),
@@ -39,12 +41,21 @@ class Round(models.Model):
 
     circle = models.ForeignKey(Circle, on_delete=models.CASCADE)
     recipient = models.ForeignKey(User, on_delete=models.CASCADE)
-    contribution_amount = models.IntegerField(default=5000)  # minor units
+    contribution_amount = models.IntegerField(default=5000)
     penalty_rate = models.IntegerField(default=3)
     deadline = models.DateTimeField()
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="OPEN")
-    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="OPEN"
+    )
 
+    payout_amount = models.IntegerField(
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
 class Contribution(models.Model):
     round = models.ForeignKey(Round, on_delete=models.CASCADE, related_name="contributions")
@@ -55,3 +66,4 @@ class Contribution(models.Model):
 
     class Meta:
         unique_together = ("round", "member")
+
