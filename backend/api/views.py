@@ -269,3 +269,25 @@ def approve_payout(request):
             "message":"Payout approved",
             "payout_amount":payout
         })
+    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def current_round(request):
+
+    circle = Circle.objects.filter(
+        members__user=request.user
+    ).first()
+
+
+    round = Round.objects.filter(
+        circle=circle,
+        status__in=["OPEN","PENDING"]
+    ).first()
+
+
+    return Response({
+        "recipient":round.recipient.username,
+        "status":round.status,
+        "amount":round.contribution_amount
+    })

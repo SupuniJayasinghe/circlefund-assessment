@@ -11,4 +11,8 @@ urlpatterns = [
     path("circles/join/", views.join_circle),   
     path("rounds/contribute/", views.contribute),
     path("rounds/approve/", views.approve_payout),
+    path(
+"rounds/current/",
+views.current_round
+)
 ]
